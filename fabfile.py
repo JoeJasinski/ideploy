@@ -78,7 +78,7 @@ class BaseSetup(object):
        print(green("Setup Requirements file.")) 
        rel_template_path="requirements.pip"
        rendered_template = self.render_template(template_path=rel_template_path, context={})
-       put(rendered_template, os.path.join(self.remote_environment_dir, rel_template_path), mode=775) 
+       put(rendered_template, os.path.join(self.remote_environment_dir, rel_template_path), mode=0775) 
 
     def setup_nginx(self):
        print(green("Setup Nginx config.")) 
