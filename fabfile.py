@@ -13,6 +13,7 @@ class BaseSetup(object):
       'etc_dir':'etc',
       'etc_django_dir':['etc', 'django'],
       'etc_nginx_dir':['etc', 'nginx'],
+      'etc_nginx_conf_dir':['etc', 'nginx','conf'],
       'log_dir':'log',
       'lib_dir':'lib',
       'bin_dir':'bin',
@@ -20,7 +21,7 @@ class BaseSetup(object):
     }
 
     CREATE_DIRS = ('project_dir', 'etc_dir','etc_django_dir',
-                   'etc_nginx_dir','log_dir','pid_dir',) 
+                   'etc_nginx_dir', 'etc_nginx_conf_dir', 'log_dir','pid_dir',) 
 
     PATH_SEPARATOR = os.path.sep
 
@@ -48,6 +49,7 @@ class BaseSetup(object):
 
         self.setup_venv()
         self.setup_requirements()
+        self.setup_nginx()
         
     def setup_venv(self):
         with settings(warn_only=True):
@@ -77,6 +79,30 @@ class BaseSetup(object):
        rel_template_path="requirements.pip"
        rendered_template = self.render_template(template_path=rel_template_path, context={})
        put(rendered_template, os.path.join(self.remote_environment_dir, rel_template_path), mode=775) 
+
+    def setup_nginx(self):
+       print(green("Setup Nginx config.")) 
+
+       rel_template_paths=(
+          (os.path.join("etc","nginx","django.conf"), 0644),
+          (os.path.join("etc","nginx","server.conf"), 0644),
+          (os.path.join("etc","nginx","locations.conf"), 0644),
+          (os.path.join("etc","nginx","nginx.conf"), 0644),
+          (os.path.join("etc","nginx","conf","mime.types"), 0644),
+          (os.path.join("etc","nginx","conf","proxy.conf"), 0644),
+          (os.path.join("etc","nginx","conf","fastcgi.conf"), 0644),
+       )
+       context = {'ENVIRONMENT_DIR':self.remote_environment_dir,
+                  'WEB_USER':self.user, 'GROUP':self.group,
+                 }
+       for rel_template_path, mode in rel_template_paths:
+           print(green("    - %s") % rel_template_path)
+           rendered_template = self.render_template(template_path=rel_template_path, context=context)
+           put(rendered_template, os.path.join(self.remote_environment_dir, rel_template_path), mode=0644) 
+
+
+
+
 
 def env_setup(env_name, user=None, group="worker", remote_sites_path="/Users/jjasinsk/ideploy/"):
     bs = BaseSetup()
