@@ -11,19 +11,19 @@ class BaseSetup(object):
     DIR_STRUCTURE = {
       'project_dir':'proj',
       'etc_dir':'etc',
-      'etc_django_dir':['etc', 'django'],
-      'etc_nginx_dir':['etc', 'nginx'],
-      'etc_nginx_conf_dir':['etc', 'nginx','conf'],
       'log_dir':'log',
       'lib_dir':'lib',
       'bin_dir':'bin',
       'pid_dir':'pid',
     }
 
-    CREATE_DIRS = ('project_dir', 'etc_dir','etc_django_dir',
-                   'etc_nginx_dir', 'etc_nginx_conf_dir', 'log_dir','pid_dir',) 
+
+    CREATE_DIRS = ['project_dir', 'etc_dir','etc_django_dir',
+                   'etc_nginx_dir', 'etc_nginx_conf_dir', 'log_dir','pid_dir',]
 
     PATH_SEPARATOR = os.path.sep
+
+    plugins = [] 
 
     def __init__(self, *args, **kwargs):
         self.local_skel_dir = os.path.join(os.path.dirname(os.path.abspath( __file__ )), 'skel')
@@ -49,7 +49,9 @@ class BaseSetup(object):
 
         self.setup_venv()
         self.setup_requirements()
-        self.setup_nginx()
+        for p in self.plugins:
+            if hasattr(self, p):
+                getattr(self, p)()
         
     def setup_venv(self):
         with settings(warn_only=True):
@@ -80,6 +82,19 @@ class BaseSetup(object):
        rendered_template = self.render_template(template_path=rel_template_path, context={})
        put(rendered_template, os.path.join(self.remote_environment_dir, rel_template_path), mode=0775) 
 
+
+class SetupNginxMixin(object):
+
+    def __init__(self, *args, **kwargs):
+        self.plugins.append("setup_nginx")
+        self.DIR_STRUCTURE.update({
+          'etc_nginx_conf_dir':['etc', 'nginx','conf'],
+          'etc_nginx_dir':['etc', 'nginx'],
+        }) 
+
+        self.CREATE_DIRS = self.CREATE_DIRS + [ 'etc_nginx_dir', 'etc_nginx_conf_dir', ]
+        super(SetupNginxMixin, self).__init__(*args, **kwargs)  
+
     def setup_nginx(self):
        print(green("Setup Nginx config.")) 
 
@@ -91,6 +106,7 @@ class BaseSetup(object):
           (os.path.join("etc","nginx","conf","mime.types"), 0644),
           (os.path.join("etc","nginx","conf","proxy.conf"), 0644),
           (os.path.join("etc","nginx","conf","fastcgi.conf"), 0644),
+          (os.path.join("bin","start_nginx.sh"), 0755),
        )
        context = {'ENVIRONMENT_DIR':self.remote_environment_dir,
                   'WEB_USER':self.user, 'GROUP':self.group,
@@ -102,9 +118,24 @@ class BaseSetup(object):
 
 
 
+class SetupDjangoMixin(object):
+
+    def __init__(self, *args, **kwargs):
+        self.plugins.append("setup_django")
+        self.DIR_STRUCTURE.update({
+          'etc_django_dir':['etc', 'django'],
+        }) 
+        super(SetupDjangoMixin, self).__init__(*args, **kwargs)  
+
+
+class DefaultSetup(SetupDjangoMixin, SetupNginxMixin, BaseSetup):
+    pass
 
 
 def env_setup(env_name, user=None, group="worker", remote_sites_path="/Users/jjasinsk/ideploy/"):
-    bs = BaseSetup()
+    bs = DefaultSetup()
+    #print bs.plugins
+    #print bs.DIR_STRUCTURE
+    #print bs.CREATE_DIRS
     bs.run(env_name, user, group, remote_sites_path)
 
