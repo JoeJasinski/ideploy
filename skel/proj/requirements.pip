@@ -1,0 +1,7 @@
+{% block base_requirements %}
+django
+south
+django-command-extensions
+django-debug-toolbar
+{% block extra_requirements  %}{% endblock extra_requirements  %}
+{% endblock base_requirements %}
