@@ -1,27 +1,35 @@
 from __future__ import with_statement
 import os
 from StringIO import StringIO
-from fabric.api import local, settings, abort, run, cd, put, env
+from fabric.api import local, settings, abort, run, cd, put, env, sudo
 from fabric.colors import green, red
 from jinja2 import Environment, PackageLoader, FileSystemLoader
 #python_requirements = ['django','south','django-extensions','django-debug-toolbar',]
+class Directory(object):
+
+    def __init__(self, path, create=False):
+        self.path = path
+        self.create = create
+
+    def get_path(self):
+        if hasattr(self.path, '__iter__'):
+            local_path = os.path.sep.join(self.path)
+        else:
+            local_path = self.path
+        return local_path
+
 
 class BaseSetup(object):
 
+
     DIR_STRUCTURE = {
-      'project_dir':'proj',
-      'etc_dir':'etc',
-      'log_dir':'log',
-      'lib_dir':'lib',
-      'bin_dir':'bin',
-      'pid_dir':'pid',
-    }
-
-
-    CREATE_DIRS = ['project_dir', 'etc_dir','etc_django_dir',
-                   'etc_nginx_dir', 'etc_nginx_conf_dir', 'log_dir','pid_dir',]
-
-    PATH_SEPARATOR = os.path.sep
+       'project_dir':Directory(path='proj', create=True),
+       'etc_dir':Directory(path='etc', create=True),
+       'log_dir':Directory(path='log', create=True),
+       'lib_dir':Directory(path='lib', create=False),
+       'bin_dir':Directory(path='bin', create=False),
+       'pid_dir':Directory(path='pid', create=True),
+    } 
 
     plugins = [] 
 
@@ -39,13 +47,13 @@ class BaseSetup(object):
 
     def run(self, env_name, user=None, group="worker", remote_sites_path="/home/joe/testenv/"):
         self.env_name = env_name
-        self.user = user
+        self.user = user if user else env_name
         self.group = group
         self.remote_sites_path = remote_sites_path 
 
         self.remote_environment_dir = os.path.join(remote_sites_path, env_name)
         self.remote_proj_dir = os.path.join(self.remote_environment_dir, 
-                                            self.DIR_STRUCTURE['project_dir'])
+                                            self.DIR_STRUCTURE['project_dir'].get_path())
 
         self.setup_venv()
         self.setup_requirements()
@@ -61,17 +69,14 @@ class BaseSetup(object):
             run("whoami")
             run("pwd")
             run("mkdir %s" % self.env_name)
+            #sudo("chown %s:%s %s" % (self.user, self.group, self.env_name))
+            #sudo("chmod g+ws %s" % (self.env_name))
             #sudo("useradd %s" % user)
         with cd(self.remote_environment_dir):
             print(green("Creating Environment Structure.")) 
             run("virtualenv --no-site-packages .")
-            new_dir_dict = dict((k,self.DIR_STRUCTURE[k]) for k in self.CREATE_DIRS if k in self.DIR_STRUCTURE).items()
-            for name, path_part in  new_dir_dict:
-                if hasattr(path_part, '__iter__'):
-                    local_path = self.PATH_SEPARATOR.join(path_part)
-                else: 
-                    local_path = path_part
-                run("mkdir -p %s"  % (local_path) )
+            for name,dir in [ (i,j) for i,j in self.DIR_STRUCTURE.items() if j.create ]:
+                run("mkdir -p %s"  % (dir.get_path()) )
 
             #run("git init proj/")
             #run("echo '%s' > proj/requirements.pip" % '\n'.join(python_requirements))
@@ -88,11 +93,10 @@ class SetupNginxMixin(object):
     def __init__(self, *args, **kwargs):
         self.plugins.append("setup_nginx")
         self.DIR_STRUCTURE.update({
-          'etc_nginx_conf_dir':['etc', 'nginx','conf'],
-          'etc_nginx_dir':['etc', 'nginx'],
+          'etc_nginx_conf_dir':Directory(path=['etc', 'nginx','conf'], create=True),
+          'etc_nginx_dir':Directory(path=['etc', 'nginx'], create=True),
         }) 
 
-        self.CREATE_DIRS = self.CREATE_DIRS + [ 'etc_nginx_dir', 'etc_nginx_conf_dir', ]
         super(SetupNginxMixin, self).__init__(*args, **kwargs)  
 
     def setup_nginx(self):
@@ -123,7 +127,7 @@ class SetupDjangoMixin(object):
     def __init__(self, *args, **kwargs):
         self.plugins.append("setup_django")
         self.DIR_STRUCTURE.update({
-          'etc_django_dir':['etc', 'django'],
+          'etc_django_dir':Directory(path=['etc', 'django'], create=True),
         }) 
         super(SetupDjangoMixin, self).__init__(*args, **kwargs)  
 
