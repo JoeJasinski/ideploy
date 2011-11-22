@@ -121,6 +121,17 @@ class SetupNginxMixin(object):
            put(rendered_template, os.path.join(self.remote_environment_dir, rel_template_path), mode=0644) 
 
 
+class SetupGitMixin(object):
+
+    def __init__(self, *args, **kwargs):
+        self.plugins.append("setup_git")
+        super(SetupGitMixin, self).__init__(*args, **kwargs)  
+
+    def setup_git(self):
+        print(green("Setup Git"))
+        with cd(self.remote_environment_dir):
+            run("git init %s" % self.DIR_STRUCTURE['project_dir'].get_path())
+       
 
 class SetupDjangoMixin(object):
 
@@ -132,7 +143,7 @@ class SetupDjangoMixin(object):
         super(SetupDjangoMixin, self).__init__(*args, **kwargs)  
 
 
-class DefaultSetup(SetupDjangoMixin, SetupNginxMixin, BaseSetup):
+class DefaultSetup(SetupDjangoMixin, SetupGitMixin, SetupNginxMixin, BaseSetup):
     pass
 
 
