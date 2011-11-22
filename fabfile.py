@@ -3,6 +3,7 @@ import os
 from StringIO import StringIO
 from fabric.api import local, settings, abort, run, cd, put, env, sudo
 from fabric.colors import green, red
+from fabric import context_managers
 from jinja2 import Environment, PackageLoader, FileSystemLoader
 #python_requirements = ['django','south','django-extensions','django-debug-toolbar',]
 class Directory(object):
@@ -33,19 +34,9 @@ class BaseSetup(object):
 
     plugins = [] 
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, env_name, user=None, group="worker", remote_sites_path="", *args, **kwargs):
         self.local_skel_dir = os.path.join(os.path.dirname(os.path.abspath( __file__ )), 'skel')
         self.jinja_env = Environment(loader=FileSystemLoader(self.local_skel_dir))
-        
-
-    def render_template(self, template_path, context): 
-        template = self.jinja_env.get_template(template_path)  
-        template_file = StringIO()
-        template_file.write(template.render(**context))
-        template_file.seek(0)
-        return template_file
-
-    def run(self, env_name, user=None, group="worker", remote_sites_path="/home/joe/testenv/"):
         self.env_name = env_name
         self.user = user if user else env_name
         self.group = group
@@ -55,6 +46,26 @@ class BaseSetup(object):
         self.remote_proj_dir = os.path.join(self.remote_environment_dir, 
                                             self.DIR_STRUCTURE['project_dir'].get_path())
 
+
+    def render_template(self, template_path, context): 
+        template = self.jinja_env.get_template(template_path)  
+        template_file = StringIO()
+        template_file.write(template.render(**context))
+        template_file.seek(0)
+        return template_file
+
+    def render_templates(self, rel_template_paths, context):
+       for rel_template_path, mode in rel_template_paths:
+           print(green("    render template %s") % rel_template_path)
+           rendered_template = self.render_template(template_path=rel_template_path, context=context)
+           put(rendered_template, os.path.join(self.remote_environment_dir, rel_template_path), mode=mode) 
+
+    def virtualenv(self, command):
+        with context_managers.cd(self.remote_environment_dir):
+            result = run('%s && %s' % (os.path.join(self.remote_environment_dir, 'bin', 'activate'), command))
+        return result
+
+    def run(self):
         self.setup_venv()
         self.setup_requirements()
         for p in self.plugins:
@@ -70,7 +81,7 @@ class BaseSetup(object):
             run("pwd")
             run("mkdir %s" % self.env_name)
             #sudo("chown %s:%s %s" % (self.user, self.group, self.env_name))
-            #sudo("chmod g+ws %s" % (self.env_name))
+            sudo("chmod g+ws %s" % (self.env_name))
             #sudo("useradd %s" % user)
         with cd(self.remote_environment_dir):
             print(green("Creating Environment Structure.")) 
@@ -112,13 +123,12 @@ class SetupNginxMixin(object):
           (os.path.join("etc","nginx","conf","fastcgi.conf"), 0644),
           (os.path.join("bin","start_nginx.sh"), 0755),
        )
-       context = {'ENVIRONMENT_DIR':self.remote_environment_dir,
+       context = {'ENVIRONMENT_DIR':self.remote_environment_dir, 
+                  'ENVIRONMENT_NAME':self.env_name, 
                   'WEB_USER':self.user, 'GROUP':self.group,
                  }
-       for rel_template_path, mode in rel_template_paths:
-           print(green("    - %s") % rel_template_path)
-           rendered_template = self.render_template(template_path=rel_template_path, context=context)
-           put(rendered_template, os.path.join(self.remote_environment_dir, rel_template_path), mode=0644) 
+
+       self.render_templates(rel_template_paths, context)
 
 
 class SetupGitMixin(object):
@@ -142,15 +152,23 @@ class SetupDjangoMixin(object):
         }) 
         super(SetupDjangoMixin, self).__init__(*args, **kwargs)  
 
+    def setup_django(self):
+        print(green("Setup Django.")) 
+        rel_template_paths=(
+           (os.path.join("bin","start_fastcgi.sh"), 0755),
+        )
+        context = {'ENVIRONMENT_DIR':self.remote_environment_dir,
+                   'WEB_USER':self.user, 'GROUP':self.group,
+                 }
+
+        self.render_templates(rel_template_paths, context)
+
 
 class DefaultSetup(SetupDjangoMixin, SetupGitMixin, SetupNginxMixin, BaseSetup):
     pass
 
 
 def env_setup(env_name, user=None, group="worker", remote_sites_path="/Users/jjasinsk/ideploy/"):
-    bs = DefaultSetup()
-    #print bs.plugins
-    #print bs.DIR_STRUCTURE
-    #print bs.CREATE_DIRS
-    bs.run(env_name, user, group, remote_sites_path)
+    bs = DefaultSetup(env_name, user=user, group=group, remote_sites_path=remote_sites_path)
+    bs.run()
 

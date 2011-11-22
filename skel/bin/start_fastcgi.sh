@@ -1,6 +1,6 @@
+#!/bin/sh
 . {{ ENVIRONMENT_DIR }}/bin/activate
 
-ENV_NAME="p2p"
 MAIN_MODULE="{{ APP_NAME }}"
 ENV_SETTINGS="{{ APP_NAME }}.settings"
 PID_FILE="${VIRTUAL_ENV}/run/fcgi.pid"
